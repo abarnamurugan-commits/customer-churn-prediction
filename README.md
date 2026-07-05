@@ -1,6 +1,7 @@
 Customer Churn Prediction in Telecom Industry
 
 A machine learning project that predicts customer churn for a telecom company using the IBM Telco Customer Churn dataset. The project covers the complete ML pipeline — data cleaning, exploratory data analysis, model training, evaluation, and deployment via an interactive Streamlit dashboard.
+
 🔗 Live Demo
 https://customer-churn-prediction-wugmeeus2jeveh4zqdnf45.streamlit.app/
 
