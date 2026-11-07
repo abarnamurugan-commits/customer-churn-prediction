@@ -18,6 +18,7 @@ st.set_page_config(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "data", "Churn Prediction Dataset.csv")
 OUTPUTS_PATH = os.path.join(BASE_DIR, "notebooks", "outputs")
+RESULTS_PATH = os.path.join(OUTPUTS_PATH, "model_comparison.csv")
 
 # ─── Load Data (cached) ────────────────────────────────────────────────────────
 @st.cache_data
@@ -28,6 +29,30 @@ def load_data():
     return df
 
 df = load_data()
+
+# ─── Load Results (cached, with fallback) ──────────────────────────────────────
+DEFAULT_RESULTS = pd.DataFrame([
+    {"Model": "Logistic Regression", "Accuracy": 78.54},
+    {"Model": "SVM",                 "Accuracy": 79.10},
+    {"Model": "Decision Tree",       "Accuracy": 72.64},
+    {"Model": "Random Forest",       "Accuracy": 79.18},
+    {"Model": "KNN",                 "Accuracy": 73.99},
+    {"Model": "Gradient Boosting",   "Accuracy": 79.53},
+    {"Model": "XGBoost",             "Accuracy": 76.40},
+    {"Model": "ANN",                 "Accuracy": 73.99},
+])
+
+@st.cache_data
+def load_results():
+    if os.path.exists(RESULTS_PATH):
+        res = pd.read_csv(RESULTS_PATH)
+        res.columns = [c.strip() for c in res.columns]
+        return res.sort_values("Accuracy", ascending=False).reset_index(drop=True)
+    return DEFAULT_RESULTS.sort_values("Accuracy", ascending=False).reset_index(drop=True)
+
+results_df = load_results()
+BEST_MODEL = results_df.iloc[0]["Model"]
+BEST_ACCURACY = float(results_df.iloc[0]["Accuracy"])
 
 # ─── Sidebar Navigation ────────────────────────────────────────────────────────
 st.sidebar.title("📡 Churn Predictor")
@@ -56,9 +81,9 @@ if page == "🏠 Home":
     st.markdown("---")
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Records", "7,043")
-    col2.metric("Features", "21")
-    col3.metric("Best Accuracy", "79.53%")
+    col1.metric("Total Records", f"{len(df):,}")
+    col2.metric("Features", df.shape[1])
+    col3.metric("Best Accuracy", f"{BEST_ACCURACY:.2f}%")
 
     st.markdown("---")
     st.markdown("## 🎯 Project Objective")
@@ -154,49 +179,61 @@ elif page == "🤖 Models":
 
     models_info = {
         "Logistic Regression": {
-            "icon": "📐", "acc": "78.54%",
+            "icon": "📐",
             "desc": "A linear model that estimates churn probability using a sigmoid function. Serves as a strong interpretable baseline.",
             "params": "max_iter=1000, solver=lbfgs"
         },
         "Support Vector Machine": {
-            "icon": "📏", "acc": "79.10%",
+            "icon": "📏",
             "desc": "Finds the optimal hyperplane that separates churners from non-churners with maximum margin.",
             "params": "kernel=rbf, C=1.0"
         },
         "Decision Tree": {
-            "icon": "🌿", "acc": "72.64%",
+            "icon": "🌿",
             "desc": "A tree-structured model that splits data based on feature thresholds. Highly interpretable but prone to overfitting.",
             "params": "max_depth=5, criterion=gini"
         },
         "Random Forest": {
-            "icon": "🌲", "acc": "79.18%",
+            "icon": "🌲",
             "desc": "An ensemble of decision trees using bagging. Reduces variance and improves accuracy over a single tree.",
             "params": "n_estimators=100, max_depth=None"
         },
         "K-Nearest Neighbors": {
-            "icon": "🔵", "acc": "73.99%",
+            "icon": "🔵",
             "desc": "Classifies customers based on the majority label among their K nearest neighbors in feature space.",
             "params": "n_neighbors=5, metric=minkowski"
         },
         "Gradient Boosting": {
-            "icon": "🚀", "acc": "79.53% ⭐",
+            "icon": "🚀",
             "desc": "Sequentially builds trees where each corrects errors of the previous. Best overall performer in this project.",
             "params": "n_estimators=100, learning_rate=0.1"
         },
         "XGBoost": {
-            "icon": "⚡", "acc": "76.40%",
+            "icon": "⚡",
             "desc": "An optimized gradient boosting library with regularization. Fast and efficient for structured/tabular data.",
             "params": "n_estimators=100, use_label_encoder=False"
         },
         "Artificial Neural Network": {
-            "icon": "🧠", "acc": "73.99%",
+            "icon": "🧠",
             "desc": "A multi-layer perceptron with hidden layers that learns non-linear patterns in the data.",
-            "params": "hidden_layers=(100,50), activation=relu"
+            "params": "hidden_layers=(64,32), activation=relu"
         },
     }
 
+    # Map display names to the names used in the results file
+    NAME_ALIASES = {
+        "Support Vector Machine": "SVM",
+        "K-Nearest Neighbors": "KNN",
+        "Artificial Neural Network": "ANN",
+    }
+    acc_map = dict(zip(results_df["Model"], results_df["Accuracy"]))
+
     for name, info in models_info.items():
-        with st.expander(f"{info['icon']} {name} — Accuracy: {info['acc']}"):
+        key = NAME_ALIASES.get(name, name)
+        acc = acc_map.get(key)
+        acc_str = f"{acc:.2f}%" if acc is not None else "N/A"
+        star = " ⭐" if key == BEST_MODEL else ""
+        with st.expander(f"{info['icon']} {name} — Accuracy: {acc_str}{star}"):
             st.write(f"**Description:** {info['desc']}")
             st.code(f"Parameters: {info['params']}", language="python")
 
@@ -221,14 +258,9 @@ elif page == "📈 Results":
 
     # Model comparison table
     st.subheader("Model Comparison Table")
-    results_data = {
-        "Model": ["Logistic Regression", "SVM", "Decision Tree", "Random Forest",
-                  "KNN", "Gradient Boosting", "XGBoost", "ANN"],
-        "Accuracy (%)": [78.54, 79.10, 72.64, 79.18, 73.99, 79.53, 76.40, 73.99],
-    }
-    results_df = pd.DataFrame(results_data).sort_values("Accuracy (%)", ascending=False).reset_index(drop=True)
-    results_df.index += 1
-    st.dataframe(results_df, use_container_width=True)
+    display_df = results_df.copy()
+    display_df.index = range(1, len(display_df) + 1)
+    st.dataframe(display_df, use_container_width=True)
 
     # Saved image
     table_img_path = os.path.join(OUTPUTS_PATH, "model_comparison_table.png")
@@ -250,14 +282,14 @@ elif page == "📈 Results":
     # Bar Chart
     st.subheader("Accuracy Comparison — Bar Chart")
     fig, ax = plt.subplots(figsize=(10, 5))
-    colors = ['#FF6B6B' if m == 'Gradient Boosting' else '#4C9BE8' for m in results_df['Model']]
-    bars = ax.barh(results_df['Model'], results_df['Accuracy (%)'], color=colors)
+    colors = ['#FF6B6B' if m == BEST_MODEL else '#4C9BE8' for m in results_df['Model']]
+    bars = ax.barh(results_df['Model'], results_df['Accuracy'], color=colors)
     ax.set_xlabel("Accuracy (%)")
     ax.set_title("Model Accuracy Comparison")
-    ax.set_xlim(68, 82)
-    for bar, val in zip(bars, results_df['Accuracy (%)']):
+    ax.set_xlim(68, max(82, results_df['Accuracy'].max() + 2))
+    for bar, val in zip(bars, results_df['Accuracy']):
         ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
-                f'{val}%', va='center', fontsize=9)
+                f'{val:.2f}%', va='center', fontsize=9)
     st.pyplot(fig)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -268,7 +300,7 @@ elif page == "💡 Insights":
     st.markdown("---")
 
     st.markdown("## 🔑 Key Findings")
-    st.success("✅ **Best Model:** Gradient Boosting with **79.53% accuracy**")
+    st.success(f"✅ **Best Model:** {BEST_MODEL} with **{BEST_ACCURACY:.2f}% accuracy**")
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
@@ -306,18 +338,11 @@ elif page == "💡 Insights":
 
     st.markdown("---")
     st.markdown("## 🏆 Model Performance Summary")
-    st.markdown("""
-    | Rank | Model | Accuracy |
-    |------|-------|----------|
-    | 🥇 1 | Gradient Boosting | 79.53% |
-    | 🥈 2 | Random Forest | 79.18% |
-    | 🥉 3 | SVM | 79.10% |
-    | 4 | Logistic Regression | 78.54% |
-    | 5 | XGBoost | 76.40% |
-    | 6 | KNN | 73.99% |
-    | 7 | ANN | 73.99% |
-    | 8 | Decision Tree | 72.64% |
-    """)
+    medals = ["🥇", "🥈", "🥉"] + [""] * len(results_df)
+    summary = "| Rank | Model | Accuracy |\n|------|-------|----------|\n"
+    for i, row in results_df.iterrows():
+        summary += f"| {medals[i]} {i + 1} | {row['Model']} | {row['Accuracy']:.2f}% |\n"
+    st.markdown(summary)
 
     st.markdown("---")
     st.info("📌 This project demonstrates that ensemble methods, especially Gradient Boosting, are highly effective for churn prediction in the telecom domain.")
